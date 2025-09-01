@@ -5,7 +5,18 @@ const fs = require("fs/promises");
 const path = require("path");
 const cors = require("cors");
 app.use(cors());
-//app.use((req, res, next) => {});
+app.use("/api/:operation/:name(*)", (req, res, next) => {
+  const ext = path.extname(req.params["name"]).toLowerCase();
+  const contentPath = path.resolve("uploads", req.params["name"]);
+  const baseDir = path.resolve("uploads");
+  if (!contentPath.startsWith(baseDir)) {
+    let error = new Error("Access denied");
+    error.code = 403;
+    error.name = "traversalError";
+    next(error);
+  }
+  next();
+});
 app.get("/api/browse", async (req, res, next) => {
   try {
     const uploadsContent = await fs.readdir("./uploads", {
@@ -28,15 +39,10 @@ app.get("/api/browse", async (req, res, next) => {
   }
 });
 
-app.get("/api/:operation/:name", async (req, res, next) => {
+app.get("/api/:operation/:name(*)", async (req, res, next) => {
   try {
-    console.log(req.params["name"] + " " + req.params["operation"]);
     const ext = path.extname(req.params["name"]).toLowerCase();
     const contentPath = path.resolve("uploads", req.params["name"]);
-    const baseDir = path.resolve("uploads");
-    if (!contentPath.startsWith(baseDir)) {
-      return res.status(403).send("Access denied");
-    }
     const contentStat = await fs.stat(contentPath);
     if (req.params["operation"] === "browse" && contentStat.isDirectory()) {
       const uploadsContent = await fs.readdir(contentPath, {
@@ -49,7 +55,7 @@ app.get("/api/:operation/:name", async (req, res, next) => {
         contentInformation.name = content.name;
         contentInformation.type = content.isFile() ? "file" : "dir";
         contentInformation.url = content.isFile()
-          ? `${req.params["name"]}/${content.name}`
+          ? `${req.params["name"]}/${content.name}` // FIX через path переписать
           : `${req.params["name"]}/${content.name}/`;
         uploadsContentInformation.push(contentInformation);
       }
@@ -62,32 +68,48 @@ app.get("/api/:operation/:name", async (req, res, next) => {
         res.setHeader("Content-Type", mime.lookup(ext));
         res.sendFile(contentPath);
       } else {
-        throw { path: contentPath }; // FIX
+        let error = new Error();
+        error.path = contentPath;
+        throw error;
       }
     }
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 });
 
 app.use((err, req, res, next) => {
-  console.log(err.path);
   const errPath = path.extname(err.path).toLowerCase();
+  let error = {
+    status: 500,
+    message: null,
+    timestamp: new Date().toISOString(),
+  };
+  if (err.name === "traversalError") {
+    error.status = 403;
+    error.message = "Access denied";
+    return res.send(error);
+  }
   if (
     errPath === "" ||
     [".html", ".txt", ".json", ".img", ".png", ".jpeg", ".gif"].includes(
       errPath
     )
   ) {
-    return res.status(405).send("Not Found");
+    error.status = 405;
+    error.message = "Content not found";
+    return res.send(error);
   }
   if (
     ![".html", ".txt", ".json", ".img", ".png", ".jpeg", ".gif"].includes(
       errPath
     )
   ) {
-    return res.status(415).send("Unsupported Media Type");
+    error.status = 415;
+    error.message = "Unsupported Media Type";
+    return res.send(error);
   }
-  res.status(500).send("Internal Server Error");
+  error.message = "Internal Server Error";
+  return res.send(error);
 });
-app.listen(3001, () => console.log("Сервер ожидает подключения..."));
+app.listen(3002, () => console.log("Сервер ожидает подключения..."));
