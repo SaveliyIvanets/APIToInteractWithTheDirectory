@@ -6,8 +6,8 @@ const path = require("path");
 const cors = require("cors");
 app.use(cors());
 app.use("/api/:operation/:name(*)", (req, res, next) => {
-  const ext = path.extname(req.params["name"]).toLowerCase();
-  const contentPath = path.resolve("uploads", req.params["name"]);
+  const ext = path.extname(req.params.name).toLowerCase();
+  const contentPath = path.resolve("uploads", req.params.name);
   const baseDir = path.resolve("uploads");
   if (!contentPath.startsWith(baseDir)) {
     let error = new Error("Access denied");
@@ -23,17 +23,14 @@ app.get("/api/browse", async (req, res, next) => {
       withFileTypes: true,
     });
     const uploadsContentInformation = [];
-    let contentInformation = {};
-    for (content of uploadsContent) {
-      contentInformation = {};
-      contentInformation.name = content.name;
-      contentInformation.type = content.isFile() ? "file" : "dir";
-      contentInformation.url = content.isFile()
-        ? `/${content.name}`
-        : `/${content.name}/`;
-      uploadsContentInformation.push(contentInformation);
+    for (const content of uploadsContent) {
+      uploadsContentInformation.push({
+        name: content.name,
+        type: content.isFile() ? "file" : "dir",
+        url: content.isFile() ? `/${content.name}` : `/${content.name}/`,
+      });
     }
-    res.send({ path: "//", items: uploadsContentInformation });
+    res.json({ path: "//", items: uploadsContentInformation });
   } catch (err) {
     next(err);
   }
@@ -42,13 +39,13 @@ app.get("/api/browse", async (req, res, next) => {
 app.get("/api/:operation/:name(*)", async (req, res, next) => {
   try {
     const localPath =
-      req.params["name"].at(-1) === "/"
-        ? req.params["name"].slice(0, -1)
-        : req.params["name"];
+      req.params.name.at(-1) === "/"
+        ? req.params.name.slice(0, -1)
+        : req.params.name;
     const ext = path.extname(localPath).toLowerCase();
     const contentPath = path.resolve("uploads", localPath);
     const contentStat = await fs.stat(contentPath);
-    if (req.params["operation"] === "browse" && contentStat.isDirectory()) {
+    if (req.params.operation === "browse" && contentStat.isDirectory()) {
       const uploadsContent = await fs.readdir(contentPath, {
         withFileTypes: true,
       });
@@ -74,7 +71,7 @@ app.get("/api/:operation/:name(*)", async (req, res, next) => {
         items: uploadsContentInformation,
       });
     } else {
-      if (req.params["operation"] === "file" && contentStat.isFile()) {
+      if (req.params.operation === "file" && contentStat.isFile()) {
         res.setHeader("Content-Type", mime.lookup(ext));
         res.sendFile(contentPath);
       } else {
@@ -89,7 +86,7 @@ app.get("/api/:operation/:name(*)", async (req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
-  const errPath = path.extname(err.path).toLowerCase();
+  const errPath = path.extname(err.path ? err.path : "").toLowerCase();
   let error = {
     status: 500,
     message: "Internal Server Error",
