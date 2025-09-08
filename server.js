@@ -22,7 +22,7 @@ app.get("/api/browse", async (req, res, next) => {
     const uploadsContent = await fs.readdir("./uploads", {
       withFileTypes: true,
     });
-    let uploadsContentInformation = [{ name: "../", type: "up", url: "/" }];
+    const uploadsContentInformation = [];
     let contentInformation = {};
     for (content of uploadsContent) {
       contentInformation = {};
@@ -41,26 +41,36 @@ app.get("/api/browse", async (req, res, next) => {
 
 app.get("/api/:operation/:name(*)", async (req, res, next) => {
   try {
-    const ext = path.extname(req.params["name"]).toLowerCase();
-    const contentPath = path.resolve("uploads", req.params["name"]);
+    const localPath =
+      req.params["name"].at(-1) === "/"
+        ? req.params["name"].slice(0, -1)
+        : req.params["name"];
+    const ext = path.extname(localPath).toLowerCase();
+    const contentPath = path.resolve("uploads", localPath);
     const contentStat = await fs.stat(contentPath);
     if (req.params["operation"] === "browse" && contentStat.isDirectory()) {
       const uploadsContent = await fs.readdir(contentPath, {
         withFileTypes: true,
       });
-      let uploadsContentInformation = [{ name: "../", type: "up", url: "/" }];
+      let uploadsContentInformation = [
+        {
+          name: "../",
+          type: "up",
+          url: `/${path.dirname(localPath)}/`,
+        },
+      ];
       let contentInformation = {};
       for (content of uploadsContent) {
         contentInformation = {};
         contentInformation.name = content.name;
         contentInformation.type = content.isFile() ? "file" : "dir";
         contentInformation.url = content.isFile()
-          ? `${req.params["name"]}/${content.name}` // FIX через path переписать
-          : `${req.params["name"]}/${content.name}/`;
+          ? `${localPath}/${content.name}`
+          : `${localPath}/${content.name}/`;
         uploadsContentInformation.push(contentInformation);
       }
-      return res.send({
-        path: `/${req.params["name"]}/`,
+      return res.json({
+        path: `/${localPath}/`,
         items: uploadsContentInformation,
       });
     } else {
@@ -82,34 +92,24 @@ app.use((err, req, res, next) => {
   const errPath = path.extname(err.path).toLowerCase();
   let error = {
     status: 500,
-    message: null,
+    message: "Internal Server Error",
     timestamp: new Date().toISOString(),
   };
   if (err.name === "traversalError") {
     error.status = 403;
     error.message = "Access denied";
-    return res.send(error);
-  }
-  if (
+  } else if (
     errPath === "" ||
     [".html", ".txt", ".json", ".img", ".png", ".jpeg", ".gif"].includes(
       errPath
     )
   ) {
-    error.status = 405;
+    error.status = 404;
     error.message = "Content not found";
-    return res.send(error);
-  }
-  if (
-    ![".html", ".txt", ".json", ".img", ".png", ".jpeg", ".gif"].includes(
-      errPath
-    )
-  ) {
+  } else {
     error.status = 415;
     error.message = "Unsupported Media Type";
-    return res.send(error);
   }
-  error.message = "Internal Server Error";
-  return res.send(error);
+  return res.json(error);
 });
 app.listen(3002, () => console.log("Сервер ожидает подключения..."));
