@@ -4,13 +4,13 @@ const app = express();
 const fs = require("fs/promises");
 const path = require("path");
 const cors = require("cors");
+
 app.use(cors());
 app.use("/api/:operation/:name(*)", (req, res, next) => {
-  const ext = path.extname(req.params.name).toLowerCase();
   const contentPath = path.resolve("uploads", req.params.name);
   const baseDir = path.resolve("uploads");
   if (!contentPath.startsWith(baseDir)) {
-    let error = new Error("Access denied");
+    const error = new Error("Access denied");
     error.code = 403;
     error.name = "traversalError";
     next(error);
@@ -49,22 +49,19 @@ app.get("/api/:operation/:name(*)", async (req, res, next) => {
       const uploadsContent = await fs.readdir(contentPath, {
         withFileTypes: true,
       });
-      let uploadsContentInformation = [
+      const uploadsContentInformation = [
         {
           name: "../",
           type: "up",
           url: `/${path.dirname(localPath)}/`,
         },
       ];
-      let contentInformation = {};
-      for (content of uploadsContent) {
-        contentInformation = {};
-        contentInformation.name = content.name;
-        contentInformation.type = content.isFile() ? "file" : "dir";
-        contentInformation.url = content.isFile()
-          ? `${localPath}/${content.name}`
-          : `${localPath}/${content.name}/`;
-        uploadsContentInformation.push(contentInformation);
+      for (const content of uploadsContent) {
+        uploadsContentInformation.push({
+          name: content.name,
+          type: content.isFile() ? "file" : "dir",
+          url: content.isFile() ? `/${content.name}` : `/${content.name}/`,
+        });
       }
       return res.json({
         path: `/${localPath}/`,
@@ -75,7 +72,7 @@ app.get("/api/:operation/:name(*)", async (req, res, next) => {
         res.setHeader("Content-Type", mime.lookup(ext));
         res.sendFile(contentPath);
       } else {
-        let error = new Error();
+        const error = new Error();
         error.path = contentPath;
         throw error;
       }
@@ -86,8 +83,8 @@ app.get("/api/:operation/:name(*)", async (req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
-  const errPath = path.extname(err.path ? err.path : "").toLowerCase();
-  let error = {
+  const errPath = path.extname(err.path || " ").toLowerCase();
+  const error = {
     status: 500,
     message: "Internal Server Error",
     timestamp: new Date().toISOString(),
